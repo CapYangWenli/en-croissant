@@ -1,0 +1,16 @@
+{
+    "$schema": "../gen/schemas/desktop-schema.json",
+    "identifier": "chesscom-login-capability",
+    "description": "Chess.com login window may load chess.com. It has no app IPC.",
+    "windows": [
+        "chesscom-login"
+    ],
+    "local": false,
+    "remote": {
+        "urls": [
+            "https://www.chess.com/*",
+            "https://*.chess.com/*"
+        ]
+    },
+    "permissions": []
+}

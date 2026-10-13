@@ -4,6 +4,7 @@
 )]
 
 mod chess;
+mod chesscom;
 mod db;
 mod engine;
 mod error;
@@ -52,6 +53,7 @@ use crate::game::{
 
 use crate::fs::set_file_as_executable;
 use crate::lexer::lex_pgn;
+use crate::chesscom::chesscom_login;
 use crate::oauth::authenticate;
 use crate::pgn::{count_pgn_games, delete_game, read_games, write_game};
 use crate::puzzle::{
@@ -147,6 +149,7 @@ fn main() {
             delete_database,
             export_to_pgn,
             authenticate,
+            chesscom_login,
             write_game,
             download_file,
             get_tournaments,
@@ -199,7 +202,11 @@ fn main() {
     ];
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_denylist(&["chesscom-login"])
+                .build(),
+        )
         .plugin(tauri_plugin_process::init())
         .plugin(
             tauri_plugin_log::Builder::default()

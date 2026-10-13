@@ -19,6 +19,7 @@ import { useStore } from "zustand";
 import { commands } from "@/bindings";
 import { TreeStateContext } from "@/components/common/TreeStateContext";
 import {
+  chessComOptionsAtom,
   currentDbTabAtom,
   currentDbTypeAtom,
   currentLocalOptionsAtom,
@@ -28,6 +29,11 @@ import {
   referenceDbAtom,
   sessionsAtom,
 } from "@/state/atoms";
+import {
+  type ChessComGamesOptions,
+  getChessComGames,
+  hasChessComSession,
+} from "@/utils/chess.com/explorer";
 import { getDatabases, type Opening, searchPosition } from "@/utils/db";
 import { formatNumber } from "@/utils/format";
 import { convertToNormalized, getLichessGames, getMasterGames } from "@/utils/lichess/api";
@@ -36,9 +42,12 @@ import DatabaseLoader from "./DatabaseLoader";
 import GamesTable from "./GamesTable";
 import NoDatabaseWarning from "./NoDatabaseWarning";
 import OpeningsTable from "./OpeningsTable";
+import ChessComOptionsPanel from "./options/ChessComOptionsPanel";
 import LichessOptionsPanel from "./options/LichessOptionsPanel";
 import LocalOptionsPanel from "./options/LocalOptionsPanel";
 import MasterOptionsPanel from "./options/MastersOptionsPanel";
+
+type DbKind = "local" | "lch_all" | "lch_master" | "ccom";
 
 type DBType =
   | { type: "local"; options: LocalOptions }
@@ -53,6 +62,11 @@ type DBType =
       options: MasterGamesOptions;
       fen: string;
       token: string;
+    }
+  | {
+      type: "ccom";
+      options: ChessComGamesOptions;
+      fen: string;
     };
 
 export type LocalOptions = {
@@ -96,6 +110,9 @@ async function fetchOpening(db: DBType, tab: string) {
         games: await convertToNormalized(data.topGames || data.recentGames || []),
       };
     })
+    .with({ type: "ccom" }, async ({ fen, options }) => {
+      return getChessComGames(fen, options);
+    })
     .with({ type: "local" }, async ({ options }) => {
       if (!options.path) throw Error("Missing reference database");
       const positionData = await searchPosition(options, tab);
@@ -114,14 +131,18 @@ function DatabasePanel() {
   const fen = useStore(store, (s) => s.currentNode().fen);
   const [referenceDatabase, setReferenceDatabase] = useAtom(referenceDbAtom);
   const sessions = useAtomValue(sessionsAtom);
-  const [debouncedFen] = useDebouncedValue(fen, 50);
+  const [db, setDb] = useAtom(currentDbTypeAtom);
+  const [lichessFen] = useDebouncedValue(fen, 50);
+  const [chessComFen] = useDebouncedValue(fen, 400);
+  const debouncedFen = db === "ccom" ? chessComFen : lichessFen;
   const [lichessOptions, setLichessOptions] = useAtom(lichessOptionsAtom);
   const [masterOptions, setMasterOptions] = useAtom(masterOptionsAtom);
+  const [chessComOptions] = useAtom(chessComOptionsAtom);
   const [localOptions, setLocalOptions] = useAtom(currentLocalOptionsAtom);
-  const [db, setDb] = useAtom(currentDbTypeAtom);
   const explorerToken = sessions.find((session) => session.lichess?.accessToken)?.lichess
     ?.accessToken;
-  const missingExplorerToken = db !== "local" && !explorerToken;
+  const missingLichessToken = (db === "lch_all" || db === "lch_master") && !explorerToken;
+  const missingChessComSession = db === "ccom" && !hasChessComSession(chessComOptions);
 
   const { data: databases } = useSWR(db === "local" ? "databases" : null, () => getDatabases());
 
@@ -158,6 +179,11 @@ function DatabasePanel() {
       fen: debouncedFen,
       token: explorerToken ?? "",
     }))
+    .with("ccom", (v) => ({
+      type: v,
+      options: chessComOptions,
+      fen: debouncedFen,
+    }))
     .exhaustive();
 
   const tab = useAtomValue(currentTabAtom);
@@ -168,7 +194,7 @@ function DatabasePanel() {
     isLoading,
     error,
   } = useSWR(
-    tabType !== "options" && !missingExplorerToken ? dbType : null,
+    tabType !== "options" && !missingLichessToken && !missingChessComSession ? dbType : null,
     async (dbType: DBType) => {
       return fetchOpening(dbType, tab?.value || "");
     },
@@ -188,9 +214,10 @@ function DatabasePanel() {
               { label: t("Board.Database.Local"), value: "local" },
               { label: t("Board.Database.LichessAll"), value: "lch_all" },
               { label: t("Board.Database.LichessMaster"), value: "lch_master" },
+              { label: t("Board.Database.ChessCom"), value: "ccom" },
             ]}
             value={db}
-            onChange={(value) => setDb(value as "local" | "lch_all" | "lch_master")}
+            onChange={(value) => setDb(value as DbKind)}
           />
 
           {db === "local" && (
@@ -250,7 +277,8 @@ function DatabasePanel() {
           error={error}
           type={db}
           header={header}
-          missingExplorerToken={missingExplorerToken}
+          missingLichessToken={missingLichessToken}
+          missingChessComSession={missingChessComSession}
         >
           <OpeningsTable openings={openingData?.openings || []} loading={isLoading} />
         </PanelWithError>
@@ -259,7 +287,8 @@ function DatabasePanel() {
           error={error}
           type={db}
           header={header}
-          missingExplorerToken={missingExplorerToken}
+          missingLichessToken={missingLichessToken}
+          missingChessComSession={missingChessComSession}
         >
           <GamesTable
             games={openingData?.games || []}
@@ -272,13 +301,15 @@ function DatabasePanel() {
           error={error}
           type={db}
           header={header}
-          missingExplorerToken={missingExplorerToken}
+          missingLichessToken={missingLichessToken}
+          missingChessComSession={missingChessComSession}
         >
           <ScrollArea flex={1} offsetScrollbars pt="sm">
             {match(db)
               .with("local", () => <LocalOptionsPanel boardFen={debouncedFen} />)
               .with("lch_all", () => <LichessOptionsPanel />)
               .with("lch_master", () => <MasterOptionsPanel />)
+              .with("ccom", () => <ChessComOptionsPanel />)
               .exhaustive()}
           </ScrollArea>
         </PanelWithError>
@@ -293,7 +324,8 @@ function PanelWithError(props: {
   type: string;
   header: React.ReactNode;
   children: React.ReactNode;
-  missingExplorerToken: boolean;
+  missingLichessToken: boolean;
+  missingChessComSession: boolean;
 }) {
   const referenceDatabase = useAtomValue(referenceDbAtom);
   const { t } = useTranslation();
@@ -301,13 +333,16 @@ function PanelWithError(props: {
   if (props.type === "local" && !referenceDatabase) {
     children = <NoDatabaseWarning />;
   }
-  if (props.missingExplorerToken && props.type !== "local") {
+  if (props.missingLichessToken) {
     children = (
       <Alert color="yellow">
         {t("Board.Database.ExplorerAuthRequired1")} <Link to="/accounts">Users</Link>{" "}
         {t("Board.Database.ExplorerAuthRequired2")}
       </Alert>
     );
+  }
+  if (props.missingChessComSession && props.value !== "options") {
+    children = <Alert color="yellow">{t("Board.Database.ChessComAuthRequired")}</Alert>;
   }
   if (props.error && props.type !== "local") {
     children = <Alert color="red">{props.error.toString()}</Alert>;

@@ -92,6 +92,9 @@ pub enum Error {
 
     #[error("Analysis cancelled")]
     AnalysisCancelled,
+
+    #[error("Chess.com login was cancelled")]
+    ChessComLoginCancelled,
 }
 
 impl From<std::io::Error> for Error {

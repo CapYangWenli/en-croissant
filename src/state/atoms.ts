@@ -22,6 +22,11 @@ import { positionFromFen, swapMove } from "@/utils/chessops";
 import type { SuccessDatabaseInfo } from "@/utils/db";
 import { type Engine, type EngineSettings, engineSchema } from "@/utils/engines";
 import {
+    type ChessComGamesOptions,
+    chessComGamesOptionsSchema,
+    DEFAULT_CHESSCOM_OPTIONS,
+} from "@/utils/chess.com/explorer";
+import {
     type LichessGamesOptions,
     lichessGamesOptionsSchema,
     type MasterGamesOptions,
@@ -411,8 +416,17 @@ export const masterOptionsAtom = atomWithStorage<MasterGamesOptions>(
     },
 );
 
+export const chessComOptionsAtom = atomWithStorage<ChessComGamesOptions>(
+    "chesscom-explorer-options",
+    DEFAULT_CHESSCOM_OPTIONS,
+    createZodStorage(chessComGamesOptionsSchema, localStorage),
+    {
+        getOnInit: true,
+    },
+);
+
 const dbTypeFamily = atomFamily((_tab: string) =>
-    atom<"local" | "lch_all" | "lch_master">("local"),
+    atom<"local" | "lch_all" | "lch_master" | "ccom">("local"),
 );
 export const currentDbTypeAtom = tabValue(dbTypeFamily);
 

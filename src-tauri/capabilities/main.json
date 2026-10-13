@@ -45,6 +45,7 @@
                 "https://www.encroissant.org/**",
                 "https://api.chess.com/**",
                 "https://www.chess.com/**",
+                "https://prod.chess-platform.com/**",
                 "https://lichess.org/**",
                 "https://explorer.lichess.org/**",
                 "https://tablebase.lichess.org/**",
