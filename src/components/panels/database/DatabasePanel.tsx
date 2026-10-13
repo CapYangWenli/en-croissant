@@ -10,6 +10,7 @@ import {
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { Link } from "@tanstack/react-router";
+import type { Move } from "chessops";
 import { useAtom, useAtomValue } from "jotai";
 import { memo, useContext, useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -67,6 +68,7 @@ type DBType =
       type: "ccom";
       options: ChessComGamesOptions;
       fen: string;
+      lastMove: Move | null;
     };
 
 export type LocalOptions = {
@@ -110,8 +112,8 @@ async function fetchOpening(db: DBType, tab: string) {
         games: await convertToNormalized(data.topGames || data.recentGames || []),
       };
     })
-    .with({ type: "ccom" }, async ({ fen, options }) => {
-      return getChessComGames(fen, options);
+    .with({ type: "ccom" }, async ({ fen, options, lastMove }) => {
+      return getChessComGames(fen, options, lastMove);
     })
     .with({ type: "local" }, async ({ options }) => {
       if (!options.path) throw Error("Missing reference database");
@@ -129,11 +131,13 @@ function DatabasePanel() {
 
   const store = useContext(TreeStateContext)!;
   const fen = useStore(store, (s) => s.currentNode().fen);
+  const lastMove = useStore(store, (s) => s.currentNode().move);
   const [referenceDatabase, setReferenceDatabase] = useAtom(referenceDbAtom);
   const sessions = useAtomValue(sessionsAtom);
   const [db, setDb] = useAtom(currentDbTypeAtom);
   const [lichessFen] = useDebouncedValue(fen, 50);
   const [chessComFen] = useDebouncedValue(fen, 400);
+  const [chessComMove] = useDebouncedValue(lastMove, 400);
   const debouncedFen = db === "ccom" ? chessComFen : lichessFen;
   const [lichessOptions, setLichessOptions] = useAtom(lichessOptionsAtom);
   const [masterOptions, setMasterOptions] = useAtom(masterOptionsAtom);
@@ -183,11 +187,18 @@ function DatabasePanel() {
       type: v,
       options: chessComOptions,
       fen: debouncedFen,
+      lastMove: chessComMove,
     }))
     .exhaustive();
 
   const tab = useAtomValue(currentTabAtom);
   const [tabType, setTabType] = useAtom(currentDbTabAtom);
+
+  useEffect(() => {
+    if (db === "ccom" && tabType === "games") {
+      setTabType("stats");
+    }
+  }, [db, tabType, setTabType]);
 
   const {
     data: openingData,
@@ -268,7 +279,7 @@ function DatabasePanel() {
           >
             {t("Board.Database.Stats")}
           </Tabs.Tab>
-          <Tabs.Tab value="games">{t("Board.Database.Games")}</Tabs.Tab>
+          {db !== "ccom" && <Tabs.Tab value="games">{t("Board.Database.Games")}</Tabs.Tab>}
           <Tabs.Tab value="options">{t("Board.Database.Options")}</Tabs.Tab>
         </Tabs.List>
 
